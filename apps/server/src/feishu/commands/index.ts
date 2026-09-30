@@ -9,7 +9,8 @@ import { replyUsersCard, softDeleteMentions, upsertMentions, topMentions, listMe
 import { getPassiveFeatureSetting, setPassiveFeatureSetting, getStyleStickerSetting, setStyleStickerSetting, passiveFeatureUsage, styleStickerUsage, describePassiveFeatureSetting, describeStyleStickerSetting, formatRatePercent, maxRateForDefault, defaultRateForFeature } from '../passive/settings.js';
 import { resolveAwemeIdFromMessage, botAdminUserId } from '../douyin-guard.js';
 import { searchDouyinByTitle, searchDouyinByTitleRandom, checkDouyinAwemeValidityCached, SEARCH_RESULT_COUNT } from '../../douyin.js';
-import { buildDouyinDeleteConfirmCard, notifyAdminDouyinInvalid } from '../cards/douyin-invalid-card.js';
+import { formatDouyinCheckStages } from '../../douyin-check.js';
+import { buildDouyinDeleteConfirmCard, notifyAdminDouyinInvalid, notifyAdminDouyinResult } from '../cards/douyin-invalid-card.js';
 import { renderStyleStickerImage } from '../../styleStickers.js';
 import { resolvePassiveMediaResource } from '../media/resource-cache.js';
 import { buildMirroredImage, sendMirroredMediaResource } from '../media/mirror.js';
@@ -510,9 +511,26 @@ export async function handleFeishuCommand(bot: FeishuBot, event: any, messageId:
         const adminUserId = botAdminUserId(bot.id);
         const validResults: typeof results = [];
         for (const r of results) {
-          const validity = await checkDouyinAwemeValidityCached(r.aweme_id);
-          if (validity.valid || validity.errored) {
+          const validity = await checkDouyinAwemeValidityCached(r.aweme_id, false, '/douyin --search 指令');
+          if (validity.valid && !validity.errored) {
             validResults.push(r);
+          } else if (validity.errored) {
+            // Inconclusive: still include the result (never block), but alert admin.
+            validResults.push(r);
+            if (adminUserId && bot.user_id != null) {
+              notifyAdminDouyinResult(bot, {
+                awemeId: r.aweme_id,
+                outcome: 'errored',
+                userId: bot.user_id,
+                adminUserId,
+                title: validity.title,
+                triggerChatId: chatId,
+                triggerPersonId: searchSender.id,
+                triggerPersonName: searchSender.name,
+                source: '/douyin --search 指令',
+                checkInfo: formatDouyinCheckStages(validity)
+              }).catch(() => {});
+            }
           } else if (adminUserId && bot.user_id != null) {
             notifyAdminDouyinInvalid(bot, {
               awemeId: r.aweme_id,
@@ -522,7 +540,8 @@ export async function handleFeishuCommand(bot: FeishuBot, event: any, messageId:
               triggerChatId: chatId,
               triggerPersonId: searchSender.id,
               triggerPersonName: searchSender.name,
-              source: '/douyin --search 指令'
+              source: '/douyin --search 指令',
+              checkInfo: formatDouyinCheckStages(validity)
             }).catch(() => {});
           }
         }

@@ -9,7 +9,7 @@ import {
   type StickerImageResult
 } from '@syru/byted-sticker-generator/node';
 import type { Request, Response } from 'express';
-import { passiveInteractionConfig } from './config.js';
+import { passiveInteractionConfig, stickerRenderConfig } from './config.js';
 import { createConcurrencyLimiter } from './utils/concurrency.js';
 
 export type { StickerFlavor };
@@ -41,15 +41,12 @@ export const STYLE_STICKER_COLOR_SWATCHES = [
   '#2c06f9'
 ] as const;
 
-const STYLE_STICKER_RENDER_CONCURRENCY = parsePositiveIntEnv(process.env.DOGEBOT_STYLE_STICKER_RENDER_CONCURRENCY, 2);
-const STYLE_STICKER_RENDER_QUEUE_MAX = parsePositiveIntEnv(process.env.DOGEBOT_STYLE_STICKER_RENDER_QUEUE_MAX, 20);
-const STYLE_STICKER_RENDER_TIMEOUT_MS = parsePositiveIntEnv(process.env.DOGEBOT_STYLE_STICKER_RENDER_TIMEOUT_MS, 20_000);
 const STYLE_STICKER_FONT_FILES = resolveStyleStickerFontFiles();
 const runStyleStickerRenderTask = createConcurrencyLimiter({
   name: 'style-sticker-render',
-  limit: STYLE_STICKER_RENDER_CONCURRENCY,
-  maxQueue: STYLE_STICKER_RENDER_QUEUE_MAX,
-  taskTimeoutMs: STYLE_STICKER_RENDER_TIMEOUT_MS
+  limit: stickerRenderConfig.concurrency,
+  maxQueue: stickerRenderConfig.queueMax,
+  taskTimeoutMs: stickerRenderConfig.timeoutMs
 });
 
 const RENDER_CACHE_TTL_MS = 60_000;
@@ -70,11 +67,6 @@ interface ResolvedStyleStickerInput {
   renderScale: number;
   gradientAngle: number;
   flashStops: number | null;
-}
-
-function parsePositiveIntEnv(value: string | undefined, fallback: number) {
-  const parsed = Number(value);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 function resolveStyleStickerFontFiles(): NodeStickerFontFiles {

@@ -1,3 +1,4 @@
+import { normalizeHexColor } from '../utils/color.js';
 import type { FeishuBot, StyleStickerFeature, StyleStickerCardAction, HelpCardAction, HelpCardPage, HelpRateDescriptor, ProbabilisticFeature } from '../types.js';
 import { passiveInteractionConfig, parseConfigurableRate } from '../config.js';
 import { deleteMessage, updateInteractiveMessage, replyMedia, fetchMessageById } from './api.js';
@@ -60,13 +61,6 @@ function stringValues(value: unknown) {
     if (text) seen.add(text);
   }
   return [...seen];
-}
-
-function normalizeCardHexColor(value: unknown) {
-  const text = firstStringValue(value);
-  if (!text) return '';
-  const normalized = text.startsWith('#') ? text : `#${text}`;
-  return /^#[0-9a-fA-F]{6}$/.test(normalized) ? normalized.toLowerCase() : '';
 }
 
 function normalizeCardGradientAngle(value: unknown) {
@@ -536,9 +530,9 @@ export async function handleFeishuCardAction(bot: FeishuBot, payload: any) {
     }
 
     const text = formStringValue(parsed.formValue, STYLE_STICKER_FORM_FIELDS.text) || styleStickerFeatureName(parsed.feature);
-    const color1 = normalizeCardHexColor(formStringValue(parsed.formValue, STYLE_STICKER_FORM_FIELDS.customColor1)) ||
+    const color1 = normalizeHexColor(formStringValue(parsed.formValue, STYLE_STICKER_FORM_FIELDS.customColor1)) ||
       formStringValue(parsed.formValue, STYLE_STICKER_FORM_FIELDS.color1);
-    const color2 = normalizeCardHexColor(formStringValue(parsed.formValue, STYLE_STICKER_FORM_FIELDS.customColor2)) ||
+    const color2 = normalizeHexColor(formStringValue(parsed.formValue, STYLE_STICKER_FORM_FIELDS.customColor2)) ||
       formStringValue(parsed.formValue, STYLE_STICKER_FORM_FIELDS.color2);
     const gradientAngle = normalizeCardGradientAngle(formStringValue(parsed.formValue, STYLE_STICKER_FORM_FIELDS.gradientAngle));
 

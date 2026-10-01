@@ -1,6 +1,6 @@
 import type { FeishuBot, StyleStickerFeature, StyleStickerCardAction, StyleStickerCardState } from '../../types.js';
 import type { StickerFlavor } from '../../styleStickers.js';
-import { STYLE_STICKER_COLOR_SWATCHES, STYLE_STICKER_HDR_EV_MAX, STYLE_STICKER_HDR_EV_DEFAULT, parseEvParam, renderStyleStickerImage } from '../../styleStickers.js';
+import { STYLE_STICKER_HDR_EV_MAX, STYLE_STICKER_HDR_EV_DEFAULT, parseEvParam, renderStyleStickerImage } from '../../styleStickers.js';
 import { uploadImage, sendImageToChat, replyCard } from '../api.js';
 import { hexToRgba } from '../../utils/color.js';
 import { styleStickerFeatureName } from '../passive/settings.js';
@@ -17,7 +17,27 @@ const STYLE_STICKER_FORM_FIELDS = {
   gradientAngle: 'gradientAngle',
   hdrEv: 'hdrEv'
 } as const;
-const STYLE_STICKER_CARD_COLOR_OPTIONS = STYLE_STICKER_COLOR_SWATCHES;
+/** 卡片手动选色项；随机配色由生成器负责。 */
+const STYLE_STICKER_CARD_COLOR_OPTIONS = [
+  '#9af665',
+  '#44b305',
+  '#ef6cdf',
+  '#ed12d3',
+  '#ff975c',
+  '#fb5b00',
+  '#69d1f2',
+  '#0989b2',
+  '#fb609e',
+  '#fa0064',
+  '#73e8d7',
+  '#14a38e',
+  '#ffb65c',
+  '#ff8d00',
+  '#5eb4fc',
+  '#0089ff',
+  '#755df6',
+  '#2c06f9'
+] as const;
 
 function styleStickerFlavor(feature: StyleStickerFeature): StickerFlavor {
   return feature === 'byte_style' ? 'bs' : 'snh';
@@ -68,9 +88,9 @@ function styleStickerCardButton(action: StyleStickerCardAction, feature: StyleSt
   };
 }
 
-function styleStickerCardColorStyles() {
+function styleStickerCardColorStyles(colors: readonly string[]) {
   return Object.fromEntries(
-    STYLE_STICKER_CARD_COLOR_OPTIONS.map((color, index) => [
+    colors.map((color, index) => [
       `cus-${index}`,
       {
         light_mode: hexToRgba(color),
@@ -80,19 +100,16 @@ function styleStickerCardColorStyles() {
   );
 }
 
-function styleStickerColorSelect(field: 'color1' | 'color2', label: string, value: string) {
-  const initialOption = STYLE_STICKER_CARD_COLOR_OPTIONS.includes(value as (typeof STYLE_STICKER_CARD_COLOR_OPTIONS)[number])
-    ? value
-    : STYLE_STICKER_CARD_COLOR_OPTIONS[0];
+function styleStickerColorSelect(field: 'color1' | 'color2', label: string, value: string, colors: readonly string[]) {
   return {
     tag: 'select_static',
     element_id: `style_sticker_${field}`,
     name: STYLE_STICKER_FORM_FIELDS[field],
     placeholder: plainText(`选择${label}`),
-    initial_option: initialOption,
+    initial_option: value,
     type: 'default',
     width: 'fill',
-    options: STYLE_STICKER_CARD_COLOR_OPTIONS.map((color, index) => ({
+    options: colors.map((color, index) => ({
       text: plainText(`色值 ${index + 1}：${color}`),
       value: color,
       icon: {
@@ -117,6 +134,7 @@ function styleStickerCustomColorInput(field: 'customColor1' | 'customColor2', la
 
 export function buildStyleStickerCard(state: StyleStickerCardState) {
   const featureName = styleStickerFeatureName(state.feature);
+  const colorOptions = [...new Set([...STYLE_STICKER_CARD_COLOR_OPTIONS, state.color1, state.color2])];
   const hdrEv = parseEvParam(state.hdrEv) ?? STYLE_STICKER_HDR_EV_DEFAULT;
   return {
     schema: '2.0',
@@ -126,7 +144,7 @@ export function buildStyleStickerCard(state: StyleStickerCardState) {
       enable_forward: false,
       summary: { content: `${featureName}生图卡片` },
       style: {
-        color: styleStickerCardColorStyles()
+        color: styleStickerCardColorStyles(colorOptions)
       }
     },
     header: {
@@ -185,7 +203,7 @@ export function buildStyleStickerCard(state: StyleStickerCardState) {
                   width: 'weighted',
                   weight: 1,
                   elements: [
-                    styleStickerColorSelect('color1', '颜色 1', state.color1),
+                    styleStickerColorSelect('color1', '颜色 1', state.color1, colorOptions),
                     styleStickerCustomColorInput('customColor1', '颜色 1')
                   ]
                 },
@@ -194,7 +212,7 @@ export function buildStyleStickerCard(state: StyleStickerCardState) {
                   width: 'weighted',
                   weight: 1,
                   elements: [
-                    styleStickerColorSelect('color2', '颜色 2', state.color2),
+                    styleStickerColorSelect('color2', '颜色 2', state.color2, colorOptions),
                     styleStickerCustomColorInput('customColor2', '颜色 2')
                   ]
                 }

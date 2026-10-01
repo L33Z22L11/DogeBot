@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { after, test } from 'node:test';
 import type { Request, Response as ExpressResponse } from 'express';
 import type { FeishuBot, StyleStickerCardState } from '../src/types.js';
-import { renderByteStyle, renderScaleNewHeights } from '../src/styleStickers.js';
+import { renderByteStyle, renderScaleNewHeights, renderStyleStickerImage } from '../src/styleStickers.js';
 
 // Card modules import the database; keep all test data away from a running bot.
 const previousDataDir = process.env.DOGEBOT_DATA_DIR;
@@ -19,7 +19,7 @@ after(() => {
   rmSync(dataDir, { recursive: true, force: true });
 });
 
-const colors = { color1: '#9af665', color2: '#755df6' };
+const colors = { color1: '#123268', color2: '#9dacc5' };
 
 test('HTTP HDR boundaries match the JPEG gain map and invalid values disable HDR', async () => {
   for (const handler of [renderByteStyle, renderScaleNewHeights]) {
@@ -53,7 +53,8 @@ function cardHdrValues(card: ReturnType<typeof buildStyleStickerCard>) {
   const input = columns.columns![1].elements[0] as { default_value: string; label: { content: string } };
   const button = form.elements!.find((element) => element.tag === 'button')!;
   const link = new URL(button.behaviors![0].default_url);
-  return { input, link };
+  const palette = form.elements!.find((element) => element.tag === 'column_set' && element.flex_mode !== 'bisect')!;
+  return { input, link, colorSelects: palette.columns!.map(column => column.elements[0]) };
 }
 
 test('cards normalize EV values and keep their displayed value and HDR link consistent', () => {
@@ -63,7 +64,15 @@ test('cards normalize EV values and keep their displayed value and HDR link cons
         feature, text: '测试', ...colors, gradientAngle: 90, imageKey: 'test-image', hdrEv,
         hdrLink: 'https://example.invalid/stale?ev=100'
       };
-      const { input, link } = cardHdrValues(buildStyleStickerCard(state));
+      const card = buildStyleStickerCard(state);
+      const { input, link, colorSelects } = cardHdrValues(card);
+      for (const [index, value] of [state.color1, state.color2].entries()) {
+        const select = colorSelects[index];
+        assert.equal(select.initial_option, value);
+        const option = select.options.find(option => option.value === value);
+        assert.ok(option, '当前颜色必须保留在下拉选项中');
+        assert.ok(card.config.style.color[option.icon.color], '当前颜色的图标必须有对应的颜色样式');
+      }
       assert.equal(input.default_value, expected);
       assert.equal(link.searchParams.get('ev'), expected);
       assert.match(input.label.content, /大于 0 且不超过 5/);
@@ -103,9 +112,27 @@ test('submitted card EV values are normalized before updating the card', async (
         }
       });
       assert.equal(cards.length, before + 1);
-      const { input, link } = cardHdrValues(cards.at(-1)!);
+      const { input, link, colorSelects } = cardHdrValues(cards.at(-1)!);
+      assert.deepEqual(colorSelects.map(select => select.initial_option), Object.values(colors));
       assert.equal(input.default_value, expected);
       assert.equal(link.searchParams.get('ev'), expected);
     }
+  }
+});
+
+test('random and one-sided colors render correctly without overriding supplied endpoints', async () => {
+  for (const flavor of ['snh', 'bs'] as const) {
+    const random = await renderStyleStickerImage('随机配色', flavor, { gradientAngle: 0 });
+    assert.equal(random.colors.length, 2);
+    assert.notEqual(random.colors[0], random.colors[1]);
+    assert.ok(random.colors.every(color => /^#[0-9a-f]{6}$/.test(color)));
+    assert.equal(random.image.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+    for (const field of ['color1', 'color2'] as const) {
+      const rendered = await renderStyleStickerImage('单色派生', flavor, { [field]: ' 123268 ', gradientAngle: 0 });
+      assert.equal(rendered.colors[field === 'color1' ? 0 : 1], '#123268');
+      assert.notEqual(rendered.colors[0], rendered.colors[1]);
+    }
+    const manual = await renderStyleStickerImage('指定配色', flavor, { ...colors, gradientAngle: 0 });
+    assert.deepEqual(manual.colors, Object.values(colors));
   }
 });

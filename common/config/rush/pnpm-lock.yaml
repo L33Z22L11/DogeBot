@@ -59,8 +59,8 @@ importers:
         specifier: ^1.66.1
         version: 1.66.1
       '@syru/byted-sticker-generator':
-        specifier: 1.0.0
-        version: 1.0.0
+        specifier: 1.0.1
+        version: 1.0.1
       better-sqlite3:
         specifier: ^13.0.3
         version: 13.0.3
@@ -537,8 +537,8 @@ packages:
     resolution: {integrity: sha512-t09vSN3MdfsyCHoFcTRCH/iUtG7OJ0CsjzB8cjAmKc/va/kIgeDI/TxsigdncE/4be734m0cvIYwNaV4i2XqAw==}
     engines: {node: '>=10'}
 
-  '@syru/byted-sticker-generator@1.0.0':
-    resolution: {integrity: sha512-gza8hdQ12CEf49IDEZf51BP66OZSV+8xQ1VWlvdEWqaO+EYxbUqxx+0vyHBrCCcajnhMdgD2PPbTt12GVfFa7g==}
+  '@syru/byted-sticker-generator@1.0.1':
+    resolution: {integrity: sha512-10VjeSGXqNuCnV5G1llEwKmGwga2VdohSYzoQTSu8GEk/1TEIyunjR6iKvK5dXD4GOkf6pT7LfdlmoXIfT5S+w==}
     engines: {node: '>=24.0.0'}
 
   '@szmarczak/http-timer@4.0.6':
@@ -2448,7 +2448,7 @@ snapshots:
 
   '@sindresorhus/is@4.6.0': {}
 
-  '@syru/byted-sticker-generator@1.0.0':
+  '@syru/byted-sticker-generator@1.0.1':
     dependencies:
       culori: 4.0.2
       hdrify: 0.12.1

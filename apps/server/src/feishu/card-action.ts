@@ -1,10 +1,10 @@
 import { normalizeHexColor } from '../utils/color.js';
 import type { FeishuBot, StyleStickerFeature, StyleStickerCardAction, HelpCardAction, HelpCardPage, HelpRateDescriptor, ProbabilisticFeature } from '../types.js';
-import { passiveInteractionConfig, parseConfigurableRate } from '../config.js';
+import { passiveInteractionConfig, parseConfigurableRate, STYLE_STICKER_FEATURES } from '../config.js';
 import { deleteMessage, updateInteractiveMessage, replyMedia, fetchMessageById } from './api.js';
 import { rememberFeishuEventKey } from './event-dedup.js';
 import { idFromFeishuObject } from './message-parser.js';
-import { buildStyleStickerCard, renderStyleStickerCardState, STYLE_STICKER_FORM_FIELDS } from './cards/style-sticker-card.js';
+import { buildStyleStickerCard, renderStyleStickerCardState, STYLE_STICKER_FORM_FIELDS, STYLE_STICKER_CARD_KIND } from './cards/style-sticker-card.js';
 import { buildHelpCard, HELP_CARD_KIND, HELP_DOUYIN_FORM_FIELDS, HELP_CRON_FORM_FIELDS, HELP_FALLBACK_MENTION_FORM_FIELDS, HELP_RATE_DESCRIPTORS, HELP_INTERACTION_DESCRIPTORS, HELP_STYLE_DESCRIPTORS, HELP_MAX_DESCRIPTORS, helpRateSettingSummary, helpRateEnabledField, recentUnsubscribedDouyinClickTexts, isHelpCardPage } from './cards/help-card.js';
 import { styleStickerFeatureName, formatRatePercent, defaultRateForFeature, setPassiveFeatureSetting, getStyleStickerSetting, setStyleStickerSetting } from './passive/settings.js';
 import { addDouyinSubscription, filterExistingDouyinSubscriptions, removeDouyinSubscription, getDefaultCommand } from './commands/douyin.js';
@@ -15,14 +15,12 @@ import { listMentions, replyUsersCard, sendUsersCardToChat, upsertMentions } fro
 import { DOUYIN_INVALID_CARD_KIND, isDouyinInvalidCardAction, renderDouyinCardState, type DouyinCardContext, type DouyinCardVariant } from './cards/douyin-invalid-card.js';
 import { softDeleteAweme, softRestoreAweme } from './douyin-guard.js';
 
-const STYLE_STICKER_CARD_KIND = 'style_sticker_generator';
-
 function isRecord(value: unknown): value is Record<string, any> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
 function isStyleStickerFeature(value: unknown): value is StyleStickerFeature {
-  return value === 'byte_style' || value === 'scale_new_heights';
+  return typeof value === 'string' && Object.hasOwn(STYLE_STICKER_FEATURES, value);
 }
 
 function isStyleStickerCardAction(value: unknown): value is StyleStickerCardAction {

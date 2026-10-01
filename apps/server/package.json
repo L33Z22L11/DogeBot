@@ -17,7 +17,6 @@
     "@larksuiteoapi/node-sdk": "^1.66.1",
     "@syru/byted-sticker-generator": "1.0.1",
     "better-sqlite3": "^13.0.3",
-    "colord": "^2.9.3",
     "cors": "^2.8.5",
     "express": "^4.21.2"
   },

@@ -14,8 +14,6 @@ import { passiveInteractionConfig, stickerRenderConfig } from './config.js';
 import { createConcurrencyLimiter } from './utils/concurrency.js';
 import { normalizeHexColor } from './utils/color.js';
 
-export type { StickerFlavor };
-
 /** 限制导出图片最长边，避免机器人上传过大图片 */
 const MAX_OUTPUT_EDGE = 4096;
 /** 与生成器支持的 HDR EV 上限保持一致，允许正数小数。 */
@@ -32,23 +30,18 @@ const runStyleStickerRenderTask = createConcurrencyLimiter({
 
 const RENDER_CACHE_TTL_MS = 60_000;
 const RENDER_CACHE_MAX_ENTRIES = 20;
-const renderResultCache = new Map<string, {
-  image: Buffer;
-  mime: string;
-  colors: readonly [string, string];
-  renderScale: number;
-  gradientAngle: number;
-  expiresAt: number;
-}>();
-
-interface ResolvedStyleStickerInput {
-  text: string;
-  flavor: StickerFlavor;
-  colors: readonly [string, string];
-  renderScale: number;
-  gradientAngle: number;
-  flashStops: number | null;
+export interface StyleStickerOptions {
+  color1?: unknown;
+  color2?: unknown;
+  scale?: unknown;
+  gradientAngle?: unknown;
+  ev?: unknown;
 }
+
+type ResolvedStyleStickerInput = ReturnType<typeof resolveStyleStickerInput>;
+type StyleStickerResult = Pick<StickerImageResult, 'mime' | 'extension'> &
+  Pick<ResolvedStyleStickerInput, 'colors' | 'renderScale' | 'gradientAngle'> & { image: Buffer };
+const renderResultCache = new Map<string, { result: StyleStickerResult; expiresAt: number }>();
 
 function resolveStyleStickerFontFiles(): NodeStickerFontFiles {
   const moduleDir = dirname(fileURLToPath(import.meta.url));
@@ -57,8 +50,6 @@ function resolveStyleStickerFontFiles(): NodeStickerFontFiles {
   const assetsDir = existsSync(distAssetsDir) ? distAssetsDir : sourceAssetsDir;
   const fontPath = (file: string) => join(assetsDir, file);
   return {
-    snh: fontPath('DouyinSansBold.woff2'),
-    bs: fontPath('YouSheBiaoTiHei.ttf'),
     appleColorEmoji: fontPath('AppleColorEmoji.ttf'),
     appleSymbols: fontPath('AppleSymbols.ttf'),
     notoColorEmoji: fontPath('NotoColorEmoji.ttf'),
@@ -101,8 +92,8 @@ function resolveGradientColors(color1: unknown, color2: unknown, flavor: Sticker
 function resolveStyleStickerInput(
   text: string,
   flavor: StickerFlavor,
-  options: { color1?: unknown; color2?: unknown; scale?: unknown; gradientAngle?: unknown; ev?: unknown }
-): ResolvedStyleStickerInput {
+  options: StyleStickerOptions
+) {
   return {
     text,
     flavor,
@@ -113,47 +104,30 @@ function resolveStyleStickerInput(
   };
 }
 
-function renderCacheKey(input: ResolvedStyleStickerInput) {
-  return [
-    input.flavor,
-    input.text,
-    input.colors[0],
-    input.colors[1],
-    input.renderScale,
-    input.gradientAngle,
-    input.flashStops ?? ''
-  ].join(':');
-}
-
 function pruneRenderCache() {
-  if (renderResultCache.size <= RENDER_CACHE_MAX_ENTRIES) return;
   const now = Date.now();
   for (const [key, entry] of renderResultCache) {
     if (entry.expiresAt <= now) renderResultCache.delete(key);
   }
-  if (renderResultCache.size <= RENDER_CACHE_MAX_ENTRIES) return;
-  const sorted = [...renderResultCache.entries()].sort((a, b) => a[1].expiresAt - b[1].expiresAt);
-  for (const [key] of sorted.slice(0, sorted.length - RENDER_CACHE_MAX_ENTRIES)) renderResultCache.delete(key);
+  // Map 保留插入顺序；满额时直接淘汰最早的产物，无需排序。
+  while (renderResultCache.size >= RENDER_CACHE_MAX_ENTRIES) {
+    renderResultCache.delete(renderResultCache.keys().next().value!);
+  }
 }
 
-export async function closeStyleStickerRenderer() {
-  return;
-}
-
-async function renderStyleStickerFile(input: ResolvedStyleStickerInput) {
-  const cacheKey = renderCacheKey(input);
+async function renderStyleStickerFile(input: ResolvedStyleStickerInput): Promise<StyleStickerResult> {
+  const cacheKey = JSON.stringify(input);
   const cached = renderResultCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
-    return { image: cached.image, mime: cached.mime, colors: cached.colors, renderScale: cached.renderScale, gradientAngle: cached.gradientAngle };
+    return cached.result;
   }
 
-  const flash = input.flashStops !== null;
-  const rendered: StickerImageResult = await runStyleStickerRenderTask(() =>
+  const rendered = await runStyleStickerRenderTask(() =>
     renderStickerToImage(
       {
         text: input.text,
         flavor: input.flavor,
-        flash,
+        flash: input.flashStops !== null,
         flashStops: input.flashStops ?? undefined,
         envelope: { colors: [...input.colors], gradientAngle: input.gradientAngle }
       },
@@ -168,26 +142,27 @@ async function renderStyleStickerFile(input: ResolvedStyleStickerInput) {
   const result = {
     image: rendered.buffer,
     mime: rendered.mime,
+    extension: rendered.extension,
     colors: input.colors,
     renderScale: input.renderScale,
     gradientAngle: input.gradientAngle
   };
   pruneRenderCache();
-  renderResultCache.set(cacheKey, { ...result, expiresAt: Date.now() + RENDER_CACHE_TTL_MS });
+  renderResultCache.set(cacheKey, { result, expiresAt: Date.now() + RENDER_CACHE_TTL_MS });
   return result;
 }
 
 export async function renderStyleStickerImage(
   text: string,
   flavor: StickerFlavor,
-  options: { color1?: unknown; color2?: unknown; scale?: unknown; gradientAngle?: unknown; ev?: unknown } = {}
+  options: StyleStickerOptions = {}
 ) {
   return renderStyleStickerFile(resolveStyleStickerInput(text, flavor, options));
 }
 
 async function handleStyleSticker(req: Request, res: Response, flavor: StickerFlavor) {
   const rawText = typeof req.query.text === 'string' ? req.query.text.trim() : '';
-  // Cap the text at the same absolute limit used by the Feishu command paths.
+  // 与飞书命令使用相同的文本长度上限。
   const text = rawText.slice(0, passiveInteractionConfig().styleStickerMaxCharsLimit);
   if (!text) {
     res.status(400).json({ error: 'text is required' });
